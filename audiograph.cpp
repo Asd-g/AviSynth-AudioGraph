@@ -138,10 +138,19 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, int _graph_scale, 
 	m_audioframe_buffers(NULL),
 	m_sample_ranges_size(0),
 	m_sample_ranges(NULL),
+	graph_scale(_graph_scale),
 	frames_either_side(_frames_either_side),
 	middle_colour(_middle_colour),
 	side_colour(_side_colour)
 {
+
+	if (frames_either_side == 0)
+		frames_either_side = 25;
+	if (middle_colour == 0)
+		middle_colour = 0x00FF00;
+	if (side_colour == 0)
+		side_colour = 0x7F7F7F;
+
 	int num_visible_audioframes;
 	int bytes_per_sample;
 
@@ -250,13 +259,11 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, int _graph_scale, 
 	/*
 	*	Set the vertical scale factor.
 	*/
-	if (_graph_scale == 0)
+	if (graph_scale == 0)
 	{
 		graph_scale = 1;
 		graph_scale = GetGraphAutoScale(_env);
 	}
-	else
-		graph_scale = _graph_scale;
 }
 
 
@@ -641,7 +648,7 @@ const AVS_Linkage *AVS_linkage = 0;
 extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors)
 {
   AVS_linkage = vectors;	
-	env->AddFunction("AudioGraph", "ciiii", Create_AudioGraph, NULL);
+	env->AddFunction("AudioGraph", "c[frames_either_side]i[graph_scale]i[middle_colour]i[side_colour]i", Create_AudioGraph, NULL);
 	return "'AudioGraph' sample plugin";
 }
 

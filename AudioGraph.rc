@@ -1,0 +1,43 @@
+/*
+	This file is part of the SysInfo plugin, Copyright(C) Groucho2004.
+
+	SysInfo is free software. You can redistribute it and/or
+	modify it under the terms of the GNU General Public License
+	as published by the Free Software Foundation, either
+	version 3 of the License, or any later version.
+
+	SysInfo is distributed in the hope that it will be useful
+	but WITHOUT ANY WARRANTY and without the implied warranty
+	of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+	See the GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with SysInfo. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+#include <winres.h>
+#include "version.h"
+
+VS_VERSION_INFO VERSIONINFO
+	FILEVERSION      VERSION_NUM
+	PRODUCTVERSION   VERSION_NUM
+	FILEOS           VOS_NT
+	FILETYPE         VFT_DLL
+BEGIN
+	BLOCK "StringFileInfo"
+	BEGIN
+		BLOCK "080904b0"
+		BEGIN
+			VALUE "Comments", COMMENTS_STR
+			VALUE "FileDescription", PRODUCTNAME_STR
+			VALUE "FileVersion", VERSION_STR
+			VALUE "ProductName", PRODUCTNAME_STR
+			VALUE "ProductVersion", VERSION_STR
+			VALUE "LegalCopyright", COPYRIGHT_STR
+		END
+	END
+	BLOCK "VarFileInfo"
+	BEGIN
+		VALUE "Translation", 0x809, 1200
+	END
+END

@@ -1,3 +1,13 @@
+##### v0.0.1:
+    Update by Groucho2004:
+        Added version resource
+        Provided default values for:
+            * frames_either_side (25),
+            * graph_scale (0),
+            * middle_colour ($00FF00),
+            * side_colour ($7F7F7F)
+        Please note that the parameters now don't have a underscore prefix.
+
 ##### v0.0.0:
     Update by Groucho2004:
         Update to AviSynth 2.6 api
