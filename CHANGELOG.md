@@ -1,3 +1,8 @@
+##### v0.0.0:
+    Update by Groucho2004:
+        Update to AviSynth 2.6 api
+        x86 and x64 binaries
+
 ##### 20080928:
     Update by Ihor Bobalo:
         Includes new parameters "_graph_scale", "_middle_colour", and "_side_colour"

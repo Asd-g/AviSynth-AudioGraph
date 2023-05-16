@@ -24,6 +24,9 @@ Parameters:
                          8-bit or 16-bit mono or stereo audio.
   frames_either_side     The number of frames, either side of the current
                          frame, which should be graphed.
+ _graph_scale			The vertical scale factor. Set to 0 to enable auto-scale
+ _middle_colour			The graph colour for the current frame
+ _side_colour			The graph colour for the frames on either side of the current
 
 The effect of the frames_either_side parameter is perhaps better explained
 by this table:
@@ -47,7 +50,16 @@ the length passed to BlankClip to match the duration of your WAV file.
 
   LoadPlugin("audgraph.dll")
   audio = WAVSource("sample.wav")
-  return AudioGraph(AudioDub(BlankClip(1000), audio), 20)
+  return AudioGraph(AudioDub(BlankClip(1000), audio), 20, 0, $8a9dff, $fcb5db)
+
+TO DO:
+-----
+- Allow separate graphing of left or right channels of stereo audio (using
+  different colours).
+- Fix the "feature" that the current frame's audio is not always centred
+  on the display.  It can be offset quite far to the right, depending on
+  the relationship between video frame width and frames_either_side.
+
 
 
 

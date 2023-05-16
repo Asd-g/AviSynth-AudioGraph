@@ -63,8 +63,8 @@
 
 #include "windows.h"
 #include "crtdbg.h"
-#include "avisynth.h"
-//#include "audio.h"
+#include "avs_headers\avisynth.h"
+#include "convertaudio.h"
 
 /*
  * How this filter works:
@@ -637,8 +637,10 @@ AVSValue __cdecl Create_AudioGraph(AVSValue args, void* user_data, IScriptEnviro
  * Returns:
  *   A short description of the plugin.
  */
-extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit2(IScriptEnvironment* env)
+const AVS_Linkage *AVS_linkage = 0;
+extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScriptEnvironment* env, const AVS_Linkage* const vectors)
 {
+  AVS_linkage = vectors;	
 	env->AddFunction("AudioGraph", "ciiii", Create_AudioGraph, NULL);
 	return "'AudioGraph' sample plugin";
 }
