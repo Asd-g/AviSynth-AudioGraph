@@ -64,7 +64,7 @@
 #include "windows.h"
 #include "crtdbg.h"
 #include "avisynth.h"
-
+#include "audio.h"
 
 /*
  * How this filter works:
@@ -117,7 +117,7 @@ private:
  *                          frame, whose audio should be graphed.
  */
 AudioGraph::AudioGraph(PClip _child, int _frames_either_side, IScriptEnvironment* _env) :
-    GenericVideoFilter(_child),
+    GenericVideoFilter(ConvertAudio::Create(_child,SAMPLE_INT16|SAMPLE_INT8,SAMPLE_INT16)),
     audio_buffer(NULL),
     audioframe_buffers(NULL),
     cache_lookup(NULL),
@@ -126,6 +126,12 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, IScriptEnvironment
 {
     int num_visible_audioframes;
     int bytes_per_sample;
+
+    if (vi.IsYUY2()) 
+      child = _env->Invoke("Greyscale", child).AsClip();
+
+    if (vi.IsYV12()) 
+      _env->ThrowError("AudioGraph:  YV12 mode not supported.");
 
     if (! vi.HasAudio())
         _env->ThrowError("AudioGraph: clip has no audio");
@@ -137,7 +143,7 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, IScriptEnvironment
      * data for one frame at a time.
      */
     bytes_per_sample = vi.BytesPerAudioSample();
-    samples_per_frame = vi.AudioSamplesFromFrames(1);
+    samples_per_frame = (int)vi.AudioSamplesFromFrames(1);
     audio_buffer = new BYTE[bytes_per_sample * samples_per_frame];
     /*
      * Calculate the number of visible audioframes.  For efficiency reasons,
@@ -199,8 +205,8 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, IScriptEnvironment
     while (1 << log_samples_per_pixel < (samples_per_frame / pixels_per_audioframe))
         log_samples_per_pixel++;
     log_mono_samples_per_pixel = log_samples_per_pixel;
-    if (vi.stereo)
-        log_mono_samples_per_pixel++;
+//    if (vi.AudioChannels)
+        log_mono_samples_per_pixel+=vi.AudioChannels()-1;
     /*
      * The second problem is that calculating which pixel a given sample
      * contributes to also involves division.  This is easily solved by
@@ -317,7 +323,7 @@ WORD *AudioGraph::GetAudioFrame(int frame, IScriptEnvironment* env)
     if (cache_lookup[audioframe_index] != frame)
     {
         child->GetAudio(audio_buffer, vi.AudioSamplesFromFrames(frame), samples_per_frame, env);
-        if (vi.sixteen_bit)
+        if (vi.sample_type==SAMPLE_INT16)
             FillAudioFrame16(audioframe_buffer);
         else
             FillAudioFrame8(audioframe_buffer);
@@ -373,32 +379,46 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
      *
      * If speed was really critical this could be rewritten in assembler.
      */
-    if (vi.IsYUV())
+    if (vi.IsYUY2())
     {
+        bool col = false;
         while (pixels_per_row--)
-        {
+        {   
             if (x_pixel == pixels_per_audioframe)
             {
                 audioframe_buffer = GetAudioFrame(frame, env);
-                colour = (frame == n) ? 0x007F : 0x0000;
+                col = (frame==n);
                 frame++;
                 x_pixel = 0;
             }
+
             int y_pixel = audioframe_buffer[x_pixel];
+
             while (prev_y_pixel < y_pixel)
             {
-                *(WORD*)dstp = colour;
-                dstp += dst_pitch;
-                prev_y_pixel++;
+
+              dstp[0] = dstp[2] = 235;
+              dstp[1] = dstp[3] = (col) ? 15 : 225;
+
+              dstp += dst_pitch;
+              prev_y_pixel++;
             }
             while (prev_y_pixel > y_pixel)
             {
-                *(WORD*)dstp = colour;
-                dstp -= dst_pitch;
-                prev_y_pixel--;
+
+              dstp[0] = dstp[2] = 235;
+              dstp[1] = dstp[3] = (col) ? 15 : 225;
+
+              dstp -= dst_pitch;
+              prev_y_pixel--;
             }
-            *(WORD*)dstp = colour;
-            dstp += 2;
+
+            dstp[0] = dstp[2] = 235;
+            dstp[1] = dstp[3] = (col) ? 15 : 225;
+
+            if (x_pixel&1)
+              dstp += 4;
+
             x_pixel++;
         }
     }
@@ -466,6 +486,9 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
             x_pixel++;
         }
     }
+    else if (vi.IsYV12()) {
+
+    }
     return dst;
 }
 
@@ -501,7 +524,7 @@ AVSValue __cdecl Create_AudioGraph(AVSValue args, void* user_data, IScriptEnviro
  * Returns:
  *   A short description of the plugin.
  */
-extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit(IScriptEnvironment* env)
+extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit2(IScriptEnvironment* env)
 {
     env->AddFunction("AudioGraph", "ci", Create_AudioGraph, NULL);
     return "`AudioGraph' sample plugin";

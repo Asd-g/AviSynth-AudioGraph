@@ -1,5 +1,5 @@
 
-AudioGraph filter for AviSynth
+AudioGraph filter for AviSynth (2.5)
 Richard Ling - r.ling(at)eudoramail.com
 
 This filter displays the audio waveform for a video, superimposed on the
@@ -48,4 +48,15 @@ the length passed to BlankClip to match the duration of your WAV file.
   LoadPlugin("audgraph.dll")
   audio = WAVSource("sample.wav")
   return AudioGraph(AudioDub(BlankClip(1000), audio), 20)
+
+
+
+
+Coverted to AviSynth 2.5 by Klaus Post.
+---------------------------------------
+- No YV12 support.
+- Should support multiple channels.
+- YUY2 mode made a bit more eyepleasing, IMO.
+  - It makes the graph a bit more blocky.
+  - YUY2 mode is converted to greyscale.
 
