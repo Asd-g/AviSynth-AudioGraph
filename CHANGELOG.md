@@ -1,3 +1,12 @@
+##### v0.0.2:
+    Update by Asd-g:
+        Fixed undefined behavior - uninitialized optional parameters.
+        Fixed undefined behavior - uninitialized allocated memory.
+        Fixed undefined behavior (float input audio) (CPUs with SSE/SSE2) by reenabling the internal conversion from/to audio float.
+        Fixed upside down graph. (YUY2)
+        Added support for YV24 and planar RGB/RGBA (8-bit).
+        Added support for frame properties passthrough.
+
 ##### v0.0.1:
     Update by Groucho2004:
         Added version resource

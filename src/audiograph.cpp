@@ -61,9 +61,9 @@
  *   the relationship between video frame width and frames_either_side.
  */
 
-#include "windows.h"
-#include "crtdbg.h"
-#include "avs_headers\avisynth.h"
+#include <windows.h>
+
+#include "avisynth.h"
 #include "convertaudio.h"
 
 /*
@@ -91,20 +91,20 @@ public:
 	AudioGraph(PClip _child, int _frames_either_side, int _graph_scale, int _middle_colour, int _side_colour, IScriptEnvironment* _env);
 	virtual ~AudioGraph();
 	int GetGraphAutoScale(IScriptEnvironment* _env);
-	void FillAudioFrame8(WORD *audioframe_buffer);
-	void FillAudioFrame16(WORD *audioframe_buffer);
-	WORD *GetAudioFrame(int frame, IScriptEnvironment* env);
+	void FillAudioFrame8(uint16_t *audioframe_buffer);
+	void FillAudioFrame16(uint16_t *audioframe_buffer);
+	uint16_t *GetAudioFrame(int frame, IScriptEnvironment* env);
 	PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env);
 private:
 	IScriptEnvironment* m_env;
 	size_t  m_audio_buffer_size;
-	BYTE*   m_audio_buffer;
+	uint8_t*   m_audio_buffer;
 	size_t  m_cache_lookup_size;
 	int*    m_cache_lookup;
 	size_t  m_audioframe_buffers_size;
-	WORD*   m_audioframe_buffers;
+	uint16_t*   m_audioframe_buffers;
 	size_t  m_sample_ranges_size;
-	BYTE**  m_sample_ranges;
+	uint8_t**  m_sample_ranges;
 	int samples_per_frame;
 	int num_audioframe_buffers;
 	int frames_either_side;
@@ -113,6 +113,7 @@ private:
 	int log_mono_samples_per_pixel;
 	int middle_colour, side_colour;
 	int graph_scale;
+	bool v8;
 };
 
 
@@ -157,8 +158,8 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, int _graph_scale, 
 	if (vi.IsYUY2()) 
 	  child = _env->Invoke("Greyscale", child).AsClip();
 
-	if (vi.IsYV12()) 
-	  _env->ThrowError("AudioGraph:  YV12 mode not supported.");
+	if (vi.ComponentSize() > 1 || (!vi.IsRGB() && !vi.IsYV24() && !vi.IsYUY2()))
+	  _env->ThrowError("AudioGraph:  not supported colorspace format.");
 
 	if (! vi.HasAudio())
 		_env->ThrowError("AudioGraph: clip has no audio");
@@ -173,7 +174,7 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, int _graph_scale, 
 	int audio_channels_count = vi.AudioChannels();
 	samples_per_frame = (int)vi.AudioSamplesFromFrames(1);
 	m_audio_buffer_size = bytes_per_sample * samples_per_frame * audio_channels_count;
-	m_audio_buffer = new BYTE[m_audio_buffer_size];
+	m_audio_buffer = new uint8_t[m_audio_buffer_size]();
 	/*
 	 * Calculate the number of visible audioframes.  For efficiency reasons,
 	 * the width of an audioframe is rounded up to an exact number of pixels.
@@ -202,7 +203,7 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, int _graph_scale, 
 	while (num_audioframe_buffers < num_visible_audioframes)
 		num_audioframe_buffers <<= 1;
 	m_audioframe_buffers_size = pixels_per_audioframe * num_audioframe_buffers;
-	m_audioframe_buffers = new WORD[m_audioframe_buffers_size];
+	m_audioframe_buffers = new uint16_t[m_audioframe_buffers_size];
 	/*
 	 * cache_lookup tells us which audioframe is currently stored in each
 	 * audioframe buffer.  Initialise this with an invalid value meaning
@@ -250,7 +251,7 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, int _graph_scale, 
 		_env->ThrowError("AudioGraph: invalid audio buffer size");
 
 	m_sample_ranges_size = pixels_per_audioframe;
-	m_sample_ranges = new BYTE*[m_sample_ranges_size];
+	m_sample_ranges = new uint8_t*[m_sample_ranges_size];
 	m_sample_ranges[0] = m_audio_buffer;
 	// Note, pixels_per_audioframe must be at least 2 - this was checked above
 	for (int x_pixel = 1; x_pixel < pixels_per_audioframe; x_pixel++)
@@ -264,6 +265,8 @@ AudioGraph::AudioGraph(PClip _child, int _frames_either_side, int _graph_scale, 
 		graph_scale = 1;
 		graph_scale = GetGraphAutoScale(_env);
 	}
+
+	v8 = _env->FunctionExists("propShow");
 }
 
 
@@ -285,7 +288,7 @@ int AudioGraph::GetGraphAutoScale(IScriptEnvironment* _env)
 {
 	int max_graph_y_pixel = 0, y_pixel;
 	int height2 = vi.height>>1;
-	WORD* audioframe_buffer;
+	uint16_t* audioframe_buffer;
 
 	for (int fi = 0; fi < vi.num_frames; ++fi)
 	{
@@ -323,24 +326,24 @@ inline T Clamp(const T& _x, const T& _a, const T& _b)
  * Parameters:
  *   audioframe_buffer     A pointer to the audioframe buffer to fill.
  */
-void AudioGraph::FillAudioFrame8(WORD *audioframe_buffer)
+void AudioGraph::FillAudioFrame8(uint16_t *audioframe_buffer)
 {
 	int height2 = vi.height>>1;
 	for (int x_pixel = 0; x_pixel < pixels_per_audioframe; x_pixel++)
 	{
 		if (x_pixel >= (int)m_sample_ranges_size)
 			m_env->ThrowError("AudioGraph: x pixel 8");
-		BYTE *src = m_sample_ranges[x_pixel];
+		uint8_t *src = m_sample_ranges[x_pixel];
 		int y_pixel = 0;
 		int num_samples = 1 << log_mono_samples_per_pixel;
 		while (num_samples--)
 		{
-			y_pixel += *(BYTE*)src - 128;
+			y_pixel += *(uint8_t*)src - 128;
 			src++;
 		}
 		y_pixel >>= log_mono_samples_per_pixel;
 		y_pixel = Clamp((y_pixel * vi.height / 256) * graph_scale, -height2, height2);
-		audioframe_buffer[x_pixel] = (WORD)(height2 + y_pixel);
+		audioframe_buffer[x_pixel] = (uint16_t)(height2 + y_pixel);
 	}
 }
 
@@ -355,14 +358,14 @@ void AudioGraph::FillAudioFrame8(WORD *audioframe_buffer)
  * Parameters:
  *   audioframe_buffer     A pointer to the audioframe buffer to fill.
  */
-void AudioGraph::FillAudioFrame16(WORD *audioframe_buffer)
+void AudioGraph::FillAudioFrame16(uint16_t *audioframe_buffer)
 {
 	int height2 = vi.height>>1;
 	for (int x_pixel = 0; x_pixel < pixels_per_audioframe; x_pixel++)
 	{
 		if (x_pixel >= (int)m_sample_ranges_size)
 			m_env->ThrowError("AudioGraph: x pixel 16");
-		BYTE *src = m_sample_ranges[x_pixel];
+		uint8_t *src = m_sample_ranges[x_pixel];
 		int y_pixel = 0;
 		int num_samples = 1 << log_mono_samples_per_pixel;
 		while (num_samples--)
@@ -372,7 +375,7 @@ void AudioGraph::FillAudioFrame16(WORD *audioframe_buffer)
 		}
 		y_pixel >>= log_mono_samples_per_pixel;
 		y_pixel = Clamp((y_pixel * vi.height / 65536) * graph_scale, -height2, height2);
-		audioframe_buffer[x_pixel] = (WORD)(height2 + y_pixel);
+		audioframe_buffer[x_pixel] = (uint16_t)(height2 + y_pixel);
 	}
 }
 
@@ -392,10 +395,10 @@ void AudioGraph::FillAudioFrame16(WORD *audioframe_buffer)
  * Returns:
  *   A pointer to the audioframe buffer holding the requested audioframe.
  */
-WORD *AudioGraph::GetAudioFrame(int frame, IScriptEnvironment* env)
+uint16_t *AudioGraph::GetAudioFrame(int frame, IScriptEnvironment* env)
 {
 	int audioframe_buffer_index, audioframe_index;
-	WORD *audioframe_buffer;
+	uint16_t *audioframe_buffer;
 
 	audioframe_index = frame & (num_audioframe_buffers - 1);
 	audioframe_buffer_index = audioframe_index * pixels_per_audioframe;
@@ -415,12 +418,8 @@ WORD *AudioGraph::GetAudioFrame(int frame, IScriptEnvironment* env)
 		} else {
 			m_env->ThrowError("AudGraph: invalid sample type");
 		}
-		__int64 start = vi.AudioSamplesFromFrames(frame);
-		try {
-			child->GetAudio(m_audio_buffer, start, samples_per_frame, env);
-		} catch (AvisynthError err) {
-			memset(m_audio_buffer, 0, m_audio_buffer_size);
-		}
+		int64_t start = vi.AudioSamplesFromFrames(frame);
+		child->GetAudio(m_audio_buffer, start, samples_per_frame, env);
 		if (vi.sample_type == SAMPLE_INT16)
 			FillAudioFrame16(audioframe_buffer);
 		else if (vi.sample_type == SAMPLE_INT8)
@@ -451,7 +450,7 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 	 * First create a copy of the child frame.
 	 */
 	PVideoFrame src = child->GetFrame(n, env);
-	PVideoFrame dst = env->NewVideoFrame(vi);
+	PVideoFrame dst = (v8) ? env->NewVideoFrameP(vi, &src) :  env->NewVideoFrame(vi);
 	const unsigned char* srcp = src->GetReadPtr();
 	unsigned char* dstp = dst->GetWritePtr();
 	int src_pitch = src->GetPitch();
@@ -464,9 +463,8 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 	env->BitBlt(dstp, dst_pitch, srcp, src_pitch, row_size, height);
 
 	int prev_y_pixel = height >> 1;
-	dstp += prev_y_pixel * dst_pitch;
 	int frame = n - frames_either_side;
-	WORD *audioframe_buffer;
+	uint16_t *audioframe_buffer;
 	int x_pixel = pixels_per_audioframe;
 	int colour;
 
@@ -481,6 +479,7 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 	 */
 	if (vi.IsYUY2())
 	{
+		dstp += ((prev_y_pixel - 1) * dst_pitch);
 		bool col = false;
 		while (pixels_per_row--)
 		{   
@@ -500,7 +499,7 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 			  dstp[0] = dstp[2] = 235;
 			  dstp[1] = dstp[3] = (col) ? 15 : 225;
 
-			  dstp += dst_pitch;
+			  dstp -= dst_pitch;
 			  prev_y_pixel++;
 			}
 			while (prev_y_pixel > y_pixel)
@@ -509,7 +508,7 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 			  dstp[0] = dstp[2] = 235;
 			  dstp[1] = dstp[3] = (col) ? 15 : 225;
 
-			  dstp -= dst_pitch;
+			  dstp += dst_pitch;
 			  prev_y_pixel--;
 			}
 
@@ -524,6 +523,8 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 	}
 	else if (vi.IsRGB24())
 	{
+		dstp += prev_y_pixel * dst_pitch;
+
 		while (pixels_per_row--)
 		{
 			if (x_pixel == pixels_per_audioframe)
@@ -535,9 +536,9 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 				unsigned char* vlinep = dst->GetWritePtr()+(frame-n+frames_either_side)*pixels_per_audioframe*bytes_per_pixel;
 				for (int y = 0; y < height; ++y)
 				{
-					*(BYTE*)(vlinep+0) = *((BYTE*)&colour+0);
-					*(BYTE*)(vlinep+1) = *((BYTE*)&colour+1);
-					*(BYTE*)(vlinep+2) = *((BYTE*)&colour+2);
+					*(uint8_t*)(vlinep+0) = *((uint8_t*)&colour+0);
+					*(uint8_t*)(vlinep+1) = *((uint8_t*)&colour+1);
+					*(uint8_t*)(vlinep+2) = *((uint8_t*)&colour+2);
 					vlinep += row_size;
 				}
 
@@ -547,29 +548,31 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 			int y_pixel = audioframe_buffer[x_pixel];
 			while (prev_y_pixel < y_pixel)
 			{
-				*(BYTE*)(dstp+0) = *((BYTE*)&colour+0);
-				*(BYTE*)(dstp+1) = *((BYTE*)&colour+1);
-				*(BYTE*)(dstp+2) = *((BYTE*)&colour+2);
+				*(uint8_t*)(dstp+0) = *((uint8_t*)&colour+0);
+				*(uint8_t*)(dstp+1) = *((uint8_t*)&colour+1);
+				*(uint8_t*)(dstp+2) = *((uint8_t*)&colour+2);
 				dstp += dst_pitch;
 				prev_y_pixel++;
 			}
 			while (prev_y_pixel > y_pixel)
 			{
-				*(BYTE*)(dstp+0) = *((BYTE*)&colour+0);
-				*(BYTE*)(dstp+1) = *((BYTE*)&colour+1);
-				*(BYTE*)(dstp+2) = *((BYTE*)&colour+2);
+				*(uint8_t*)(dstp+0) = *((uint8_t*)&colour+0);
+				*(uint8_t*)(dstp+1) = *((uint8_t*)&colour+1);
+				*(uint8_t*)(dstp+2) = *((uint8_t*)&colour+2);
 				dstp -= dst_pitch;
 				prev_y_pixel--;
 			}
-			*(BYTE*)(dstp+0) = *((BYTE*)&colour+0);
-			*(BYTE*)(dstp+1) = *((BYTE*)&colour+1);
-			*(BYTE*)(dstp+2) = *((BYTE*)&colour+2);
+			*(uint8_t*)(dstp+0) = *((uint8_t*)&colour+0);
+			*(uint8_t*)(dstp+1) = *((uint8_t*)&colour+1);
+			*(uint8_t*)(dstp+2) = *((uint8_t*)&colour+2);
 			dstp += 3;
 			x_pixel++;
 		}
 	}
 	else if (vi.IsRGB32())
 	{
+		dstp += prev_y_pixel * dst_pitch;
+
 		while (pixels_per_row--)
 		{
 			if (x_pixel == pixels_per_audioframe)
@@ -586,7 +589,7 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 				}
 
 				colour = (frame == n) ? middle_colour : side_colour;
-				frame++;
+				++frame;
 			}
 			int y_pixel = audioframe_buffer[x_pixel];
 			while (prev_y_pixel < y_pixel)
@@ -606,8 +609,153 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
 			x_pixel++;
 		}
 	}
-	else if (vi.IsYV12()) {
+	else if (vi.IsYV24()) {
+		uint8_t* dstpu = dst->GetWritePtr(PLANAR_U);
+		uint8_t* dstpv = dst->GetWritePtr(PLANAR_V);
 
+		memset(dstpu, 128, height * dst_pitch);
+		memset(dstpv, 128, height * dst_pitch);
+
+		dstp += ((prev_y_pixel - 1) * dst_pitch);
+		dstpu += ((prev_y_pixel - 1) * dst_pitch);
+		dstpv += ((prev_y_pixel - 1) * dst_pitch);
+
+		bool col = false;
+		while (pixels_per_row--)
+		{
+			if (x_pixel == pixels_per_audioframe)
+			{
+				audioframe_buffer = GetAudioFrame(frame, env);
+				col = (frame == n);
+				frame++;
+				x_pixel = 0;
+			}
+
+			int y_pixel = audioframe_buffer[x_pixel];
+
+			while (prev_y_pixel < y_pixel)
+			{
+
+				dstp[0] = dstp[1] = 235;
+				dstpu[0] = dstpu[1] = (col) ? 15 : 225;
+				dstpv[0] = dstpv[1] = (col) ? 15 : 225;
+
+				dstp -= dst_pitch;
+				dstpu -= dst_pitch;
+				dstpv -= dst_pitch;
+				prev_y_pixel++;
+			}
+			while (prev_y_pixel > y_pixel)
+			{
+
+				dstp[0] = dstp[1] = 235;
+				dstpu[0] = dstpu[1] = (col) ? 15 : 225;
+				dstpv[0] = dstpv[1] = (col) ? 15 : 225;
+
+				dstp += dst_pitch;
+				dstpu += dst_pitch;
+				dstpv += dst_pitch;
+				prev_y_pixel--;
+			}
+
+			dstp[0] = dstp[1] = 235;
+			dstpu[0] = dstpu[1] = (col) ? 15 : 225;
+			dstpv[0] = dstpv[1] = (col) ? 15 : 225;
+			
+			dstp++;
+			dstpu++;
+			dstpv++;
+			x_pixel++;
+		}
+	}
+	else if (vi.IsPlanarRGB() || vi.IsPlanarRGBA())
+	{
+		uint8_t* dstpb = dst->GetWritePtr(PLANAR_B);
+		uint8_t* dstpr = dst->GetWritePtr(PLANAR_R);
+		uint8_t* dstpa = (vi.IsPlanarRGBA()) ? dst->GetWritePtr(PLANAR_A) : nullptr;
+
+		env->BitBlt(dstpb, dst_pitch, src->GetReadPtr(PLANAR_B), src_pitch, row_size, height);
+		env->BitBlt(dstpr, dst_pitch, src->GetReadPtr(PLANAR_R), src_pitch, row_size, height);
+
+		if (dstpa)
+			env->BitBlt(dstpa, dst_pitch, src->GetReadPtr(PLANAR_A), src_pitch, row_size, height);
+
+		dstp += ((prev_y_pixel - 1) * dst_pitch);
+		dstpb += ((prev_y_pixel - 1) * dst_pitch);
+		dstpr += ((prev_y_pixel - 1) * dst_pitch);
+		if (dstpa)
+			dstpa += ((prev_y_pixel - 1) * dst_pitch);
+
+		while (pixels_per_row--)
+		{
+			if (x_pixel == pixels_per_audioframe)
+			{
+				audioframe_buffer = GetAudioFrame(frame, env);
+				colour = (frame == n || frame == n + 1) ? middle_colour : side_colour;
+				x_pixel = 0;
+
+				unsigned char* vlinep = dst->GetWritePtr() + (frame - n + frames_either_side) * pixels_per_audioframe * bytes_per_pixel;
+				unsigned char* vlinepg = dst->GetWritePtr(PLANAR_B) + (frame - n + frames_either_side) * pixels_per_audioframe * bytes_per_pixel;
+				unsigned char* vlinepb = dst->GetWritePtr(PLANAR_R) + (frame - n + frames_either_side) * pixels_per_audioframe * bytes_per_pixel;
+				unsigned char* vlinepa = (dstpa) ? dst->GetWritePtr(PLANAR_A) + (frame - n + frames_either_side) * pixels_per_audioframe * bytes_per_pixel : nullptr;
+				for (int y = 0; y < height; ++y)
+				{
+					vlinep[0] = *((uint8_t*)&colour + 1);
+					vlinepg[0] = *((uint8_t*)&colour + 2);
+					vlinepb[0] = *((uint8_t*)&colour);
+					if (dstpa)
+						*(uint8_t*)vlinepa = *((uint8_t*)&colour + 3);
+					vlinep += row_size;
+					vlinepg += row_size;
+					vlinepb += row_size;
+					if (dstpa)
+						vlinepa += row_size;
+				}
+
+				colour = (frame == n) ? middle_colour : side_colour;
+				++frame;
+			}
+			int y_pixel = audioframe_buffer[x_pixel];
+			while (prev_y_pixel < y_pixel)
+			{
+				dstp[0] = *((uint8_t*)&colour + 1);
+				dstpb[0] = *((uint8_t*)&colour + 2);
+				dstpr[0] = *((uint8_t*)&colour);
+				if (dstpa)
+					dstpa[0] = *((uint8_t*)&colour + 3);
+				dstp -= dst_pitch;
+				dstpb -= dst_pitch;
+				dstpr -= dst_pitch;
+				if (dstpa)
+					dstpa -= dst_pitch;
+				prev_y_pixel++;
+			}
+			while (prev_y_pixel > y_pixel)
+			{
+				dstp[0] = *((uint8_t*)&colour + 1);
+				dstpb[0] = *((uint8_t*)&colour + 2);
+				dstpr[0] = *((uint8_t*)&colour);
+				if (dstpa)
+					dstpa[0] = *((uint8_t*)&colour+3);
+				dstp += dst_pitch;
+				dstpb += dst_pitch;
+				dstpr += dst_pitch;
+				if (dstpa)
+					dstpa += dst_pitch;
+				prev_y_pixel--;
+			}
+			dstp[0] = *((uint8_t*)&colour + 1);
+			dstpb[0] = *((uint8_t*)&colour + 2);
+			dstpr[0] = *((uint8_t*)&colour);
+			if (dstpa)
+				dstpa[0] = *((uint8_t*)&colour + 3);
+			dstp++;
+			dstpb++;
+			dstpr++;
+			if (dstpa)
+				dstpa++;
+			x_pixel++;
+		}
 	}
 	return dst;
 }
@@ -628,7 +776,7 @@ PVideoFrame __stdcall AudioGraph::GetFrame(int n, IScriptEnvironment* env)
  */
 AVSValue __cdecl Create_AudioGraph(AVSValue args, void* user_data, IScriptEnvironment* env)
 {
-	return new AudioGraph(args[0].AsClip(), args[1].AsInt(), args[2].AsInt(), args[3].AsInt(), args[4].AsInt(), env);
+	return new AudioGraph(args[0].AsClip(), args[1].AsInt(0), args[2].AsInt(0), args[3].AsInt(0), args[4].AsInt(0), env);
 }
 
 

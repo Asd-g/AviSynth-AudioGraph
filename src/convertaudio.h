@@ -1,3 +1,6 @@
+// Avisynth v2.5.  Copyright 2009 Ben Rudiak-Gould et al.
+// http://www.avisynth.org
+
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
@@ -29,26 +32,39 @@
 // which is not derived from or based on Avisynth, such as 3rd-party filters,
 // import and export plugins, or graphical user interfaces.
 
-#ifndef AVSCORE_MINMAX_H
-#define AVSCORE_MINMAX_H
+#ifndef __Convert_Audio_H__
+#define __Convert_Audio_H__
 
-template<typename T>
-T min(T v1, T v2)
+
+class ConvertAudio : public GenericVideoFilter
+/**
+  * Helper class to convert audio to any format
+ **/
 {
-  return v1 < v2 ? v1 : v2;
-}
+public:
+  ConvertAudio(PClip _clip, int prefered_format);
+  void __stdcall GetAudio(void* buf, __int64 start, __int64 count, IScriptEnvironment* env);
+  int __stdcall SetCacheHints(int cachehints,int frame_range);  // We do pass cache requests upwards, to the cache!
 
-template<typename T>
-T max(T v1, T v2)
-{
-  return v1 > v2 ? v1 : v2;
-}
+  static PClip Create(PClip clip, int sample_type, int prefered_type);
+  virtual ~ConvertAudio();
 
-template<typename T>
-T clamp(T n, T min, T max)
-{
-    n = n > max ? max : n;
-    return n < min ? min : n;
-}
+private:
+  void convertToFloat(char* inbuf, float* outbuf, char sample_type, int count);
+  void convertFromFloat(float* inbuf, void* outbuf, char sample_type, int count);
 
-#endif // AVSCORE_MINMAX_H
+  __inline int Saturate_int8(float n);
+  __inline short Saturate_int16(float n);
+  __inline int Saturate_int24(float n);
+  __inline int Saturate_int32(float n);
+
+  char src_format;
+  char dst_format;
+  int src_bps;
+  int tempbuffer_size;
+  char *tempbuffer;
+  int floatbuffer_size;
+  SFLOAT *floatbuffer;
+};
+
+#endif //__Convert_Audio_H__

@@ -36,9 +36,9 @@
 // Copyright (c) Klaus Post 2001 - 2004
 // Copyright (c) Ian Brabham 2005
 
-#include "stdafx.h"
+#include <malloc.h>
 
-#include "avs_headers/avisynth.h"
+#include "avisynth.h"
 #include "convertaudio.h"
 
 // There are two type parameters. Acceptable sample types and a prefered sample type.
@@ -168,25 +168,25 @@ void __stdcall ConvertAudio::GetAudio(void* buf, __int64 start, __int64 count, I
   }
 
   if (src_format != SAMPLE_FLOAT) {  // Skip initial copy, if samples are already float
-	if (((((int)tmp_fb) & 3) == 0) && (env->GetCPUFlags() & CPUF_SSE2)) {
+	//if ((((*(int*)tmp_fb) & 3) == 0) && (env->GetCPUFlags() & CPUF_SSE2)) {
       //convertToFloat_SSE2(tempbuffer, tmp_fb, src_format, (int)count*channels);
-    } else if ((env->GetCPUFlags() & CPUF_SSE)) {
+    //} else if ((env->GetCPUFlags() & CPUF_SSE)) {
       //convertToFloat_SSE(tempbuffer, tmp_fb, src_format, (int)count*channels);
-    } else {
+    //} else {
       convertToFloat(tempbuffer, tmp_fb, src_format, (int)count*channels);
-    }
+    //}
   } else {
     tmp_fb = (float*)tempbuffer;
   }
 
   if (dst_format != SAMPLE_FLOAT) {  // Skip final copy, if samples are to be float
-	if ((env->GetCPUFlags() & CPUF_SSE2)) {
+	//if ((env->GetCPUFlags() & CPUF_SSE2)) {
 	  //convertFromFloat_SSE2(tmp_fb, buf, dst_format, (int)count*channels);
-	} else if ((env->GetCPUFlags() & CPUF_SSE)) {
+	//} else if ((env->GetCPUFlags() & CPUF_SSE)) {
 	  //convertFromFloat_SSE(tmp_fb, buf, dst_format, (int)count*channels);
-	} else {
+	//} else {
 	  convertFromFloat(tmp_fb, buf, dst_format, (int)count*channels);
-	}
+	//}
   }
 }
 
